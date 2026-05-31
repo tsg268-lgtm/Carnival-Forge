@@ -1914,4 +1914,379 @@ ${buildTasksText(project)}
       downloadFile(filename, buildCanonText(project), "text/plain");
     }
 
-    function exportDraft
+    function exportDraftsTextFile() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const filename = `${makeSafeFileName(project.title)}-drafts.txt`;
+      logExport("Drafts TXT", filename);
+      downloadFile(filename, buildDraftsText(project), "text/plain");
+    }
+
+    function exportPromptsTextFile() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const filename = `${makeSafeFileName(project.title)}-prompts.txt`;
+      logExport("Prompts TXT", filename);
+      downloadFile(filename, buildPromptsText(project), "text/plain");
+    }
+
+    function exportTasksTextFile() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const filename = `${makeSafeFileName(project.title)}-tasks.txt`;
+      logExport("Tasks TXT", filename);
+      downloadFile(filename, buildTasksText(project), "text/plain");
+    }
+
+    function exportFullBundle() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const filename = `${makeSafeFileName(project.title)}-full-bundle.txt`;
+      logExport("Full Bundle TXT", filename);
+      downloadFile(filename, buildFullBundleText(project), "text/plain");
+    }
+
+    function addTask() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const title = $("taskInput").value.trim();
+      if (!title) {
+        alert("Please enter a task.");
+        return;
+      }
+
+      project.tasks.unshift({
+        id: generateId("task"),
+        title,
+        completed: false,
+        createdAt: nowISO()
+      });
+
+      project.updatedAt = nowISO();
+      $("taskInput").value = "";
+      saveProjects();
+      renderWorkspace();
+    }
+
+    function renderTasks() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const list = $("tasksList");
+      list.innerHTML = "";
+
+      if (project.tasks.length === 0) {
+        list.innerHTML = `<div class="item-card"><p>No tasks yet.</p></div>`;
+        return;
+      }
+
+      project.tasks.forEach(task => {
+        const card = document.createElement("article");
+        card.className = "item-card";
+        card.innerHTML = `
+          <h3 class="${task.completed ? "task-complete" : ""}">${escapeHTML(task.title)}</h3>
+          <p class="muted">${formatDate(task.createdAt)}</p>
+          <div class="card-actions">
+            <button data-toggle-task="${task.id}">${task.completed ? "Mark Incomplete" : "Mark Complete"}</button>
+            <button class="secondary-btn" data-delete-task="${task.id}">Delete</button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+
+      document.querySelectorAll("[data-toggle-task]").forEach(button => {
+        button.addEventListener("click", () => toggleTask(button.dataset.toggleTask));
+      });
+
+      document.querySelectorAll("[data-delete-task]").forEach(button => {
+        button.addEventListener("click", () => deleteTask(button.dataset.deleteTask));
+      });
+    }
+
+    function toggleTask(taskId) {
+      const project = getActiveProject();
+      if (!project) return;
+
+      const task = project.tasks.find(item => item.id === taskId);
+      if (!task) return;
+
+      task.completed = !task.completed;
+      project.updatedAt = nowISO();
+
+      saveProjects();
+      renderWorkspace();
+    }
+
+    function deleteTask(taskId) {
+      const project = getActiveProject();
+      if (!project) return;
+
+      project.tasks = project.tasks.filter(task => task.id !== taskId);
+      project.updatedAt = nowISO();
+
+      saveProjects();
+      renderWorkspace();
+    }
+
+    function exportActiveProject() {
+      exportProjectJson();
+    }
+
+    function importProject(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function () {
+        try {
+          const imported = normalizeProject(JSON.parse(reader.result));
+
+          if (!imported.title || !imported.id) {
+            alert("This does not look like a valid Carnival Forge project backup.");
+            return;
+          }
+
+          const existingIndex = projects.findIndex(project => project.id === imported.id);
+          imported.updatedAt = nowISO();
+
+          if (existingIndex >= 0) {
+            if (!confirm("A project with this ID already exists. Replace it?")) return;
+            projects[existingIndex] = imported;
+          } else {
+            projects.unshift(imported);
+          }
+
+          saveProjects();
+          renderDashboard();
+          alert("Project imported successfully.");
+        } catch (error) {
+          console.error(error);
+          alert("Could not import this file.");
+        }
+      };
+
+      reader.readAsText(file);
+      event.target.value = "";
+    }
+
+    function deleteActiveProject() {
+      const project = getActiveProject();
+      if (!project) return;
+
+      if (!confirm(`Delete "${project.title}"? This cannot be undone unless you exported a backup.`)) return;
+
+      projects = projects.filter(item => item.id !== project.id);
+      saveProjects();
+      showDashboard();
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-btn").forEach(button => {
+        button.classList.toggle("active", button.dataset.tab === tabId);
+      });
+
+      document.querySelectorAll(".tab-panel").forEach(panel => {
+        panel.classList.toggle("hidden", panel.id !== tabId);
+      });
+    }
+
+    function seedStarterProjectIfEmpty() {
+      if (projects.length > 0) return;
+
+      const now = nowISO();
+
+      projects.push({
+        id: generateId("project"),
+        title: "The Carnival Forge",
+        category: "Creative Engine",
+        description: "A creative command center for building worlds, books, games, canon, drafts, prompts, search, tasks, and exports.",
+        status: "Active",
+        notes: [
+          {
+            id: generateId("note"),
+            body: "First goal: build the project core, draft manager, prompt forge, export studio, and search studio using a single-file replacement workflow.",
+            createdAt: now
+          }
+        ],
+        canon: [
+          {
+            id: generateId("canon"),
+            name: "The Carnival Forge",
+            type: "Project Title",
+            status: "Active Canon",
+            description: "The main creative engine being built as a browser-first app that can later grow into a full creative operating system.",
+            createdAt: now
+          }
+        ],
+        drafts: [
+          {
+            id: generateId("draft"),
+            title: "Chapter 1: Parking Lot Pimping",
+            type: "Chapter",
+            status: "Idea",
+            body: "First chapter of my first Gathering experience.",
+            version: 1,
+            createdAt: now,
+            updatedAt: now
+          }
+        ],
+        prompts: [],
+        tasks: [
+          {
+            id: generateId("task"),
+            title: "Test Search Studio",
+            completed: false,
+            createdAt: now
+          },
+          {
+            id: generateId("task"),
+            title: "Search for Parking Lot Pimping",
+            completed: false,
+            createdAt: now
+          },
+          {
+            id: generateId("task"),
+            title: "Export v0.5 JSON backup",
+            completed: false,
+            createdAt: now
+          }
+        ],
+        exports: [],
+        createdAt: now,
+        updatedAt: now
+      });
+
+      saveProjects();
+    }
+
+    function setupEventListeners() {
+      $("createProjectBtn").addEventListener("click", createProject);
+      $("backToDashboardBtn").addEventListener("click", showDashboard);
+      $("addNoteBtn").addEventListener("click", addNote);
+      $("addCanonBtn").addEventListener("click", addCanon);
+      $("saveDraftBtn").addEventListener("click", saveNewDraft);
+      $("updateDraftBtn").addEventListener("click", updateDraft);
+      $("cancelEditDraftBtn").addEventListener("click", clearDraftEditor);
+
+      $("generatePromptBtn").addEventListener("click", generatePrompt);
+      $("copyPromptBtn").addEventListener("click", copyCurrentPrompt);
+      $("exportPromptBtn").addEventListener("click", exportCurrentPrompt);
+      $("savePromptBtn").addEventListener("click", saveCurrentPrompt);
+
+      $("runSearchBtn").addEventListener("click", runSearch);
+      $("clearSearchBtn").addEventListener("click", clearSearch);
+      $("searchInput").addEventListener("keydown", event => {
+        if (event.key === "Enter") runSearch();
+      });
+
+      $("exportJsonBtn").addEventListener("click", exportProjectJson);
+      $("exportSummaryBtn").addEventListener("click", exportProjectSummary);
+      $("exportNotesBtn").addEventListener("click", exportNotesText);
+      $("exportCanonBtn").addEventListener("click", exportCanonTextFile);
+      $("exportDraftsBtn").addEventListener("click", exportDraftsTextFile);
+      $("exportPromptsBtn").addEventListener("click", exportPromptsTextFile);
+      $("exportTasksBtn").addEventListener("click", exportTasksTextFile);
+      $("exportBundleBtn").addEventListener("click", exportFullBundle);
+
+      $("addTaskBtn").addEventListener("click", addTask);
+      $("exportProjectBtn").addEventListener("click", exportActiveProject);
+      $("deleteProjectBtn").addEventListener("click", deleteActiveProject);
+      $("importFileInput").addEventListener("change", importProject);
+
+      document.querySelectorAll(".tab-btn").forEach(button => {
+        button.addEventListener("click", () => switchTab(button.dataset.tab));
+      });
+
+      $("taskInput").addEventListener("keydown", event => {
+        if (event.key === "Enter") addTask();
+      });
+
+      $("projectTitleInput").addEventListener("keydown", event => {
+        if (event.key === "Enter") createProject();
+      });
+    }
+
+    function downloadFile(filename, content, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = filename;
+
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      URL.revokeObjectURL(url);
+    }
+
+    function copyText(text, successMessage) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => alert(successMessage))
+          .catch(() => fallbackCopy(text));
+      } else {
+        fallbackCopy(text);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const temp = document.createElement("textarea");
+      temp.value = text;
+      document.body.appendChild(temp);
+      temp.select();
+
+      try {
+        document.execCommand("copy");
+        alert("Copied to clipboard.");
+      } catch (error) {
+        alert("Could not copy automatically. Select the text manually and copy it.");
+      }
+
+      document.body.removeChild(temp);
+    }
+
+    function makeSafeFileName(value) {
+      return String(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "") || "file";
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return "Unknown date";
+
+      const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) return "Unknown date";
+
+      return date.toLocaleString();
+    }
+
+    function escapeHTML(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function initApp() {
+      setupEventListeners();
+      loadProjects();
+      seedStarterProjectIfEmpty();
+      renderDashboard();
+      console.log("The Carnival Forge v0.5 loaded successfully.");
+    }
+
+    document.addEventListener("DOMContentLoaded", initApp);
+  </script>
+</body>
+                </html>
